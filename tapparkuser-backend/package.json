@@ -1,0 +1,58 @@
+{
+  "name": "tapparkuser-backend",
+  "version": "1.0.0",
+  "description": "Backend API for Tapparkuser parking management application",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "fast": "node server-fast.js",
+    "fast-dev": "nodemon server-fast.js",
+    "super-fast": "node server-super-fast.js",
+    "test": "jest",
+    "create-db": "node scripts/create-database.js",
+    "list-db": "node scripts/list-databases.js",
+    "check-structure": "node scripts/check-existing-structure.js",
+    "check-users": "node scripts/check-users.js",
+    "migrate": "node scripts/migrate.js",
+    "migrate-compatible": "node scripts/migrate-compatible.js",
+    "seed": "node scripts/seed.js",
+    "check-db": "node scripts/check-database.js"
+  },
+  "keywords": [
+    "parking",
+    "api",
+    "nodejs",
+    "express",
+    "mysql",
+    "tapparkuser"
+  ],
+  "author": "Tapparkuser Team",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.13.2",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "express-rate-limit": "^7.1.5",
+    "express-validator": "^7.0.1",
+    "helmet": "^7.1.0",
+    "joi": "^17.11.0",
+    "jsonwebtoken": "^9.0.2",
+    "moment": "^2.29.4",
+    "multer": "^1.4.5-lts.1",
+    "mysql2": "^3.6.5",
+    "nodemailer": "^6.9.7",
+    "qrcode": "^1.5.4",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "nodemon": "^3.0.2",
+    "supertest": "^6.3.3"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}
