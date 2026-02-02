@@ -11,9 +11,14 @@ class Database {
       password: '',
       database: process.env.DB_NAME || 'merge1', // Use environment variable for database name
       waitForConnections: true,
-      connectionLimit: 5,
-      queueLimit: 0,
-      charset: 'utf8mb4'
+      connectionLimit: 20, // Increased connection limit
+      queueLimit: 100, // Increased queue limit
+      charset: 'utf8mb4',
+      acquireTimeout: 60000, // 60 seconds to get a connection
+      timeout: 60000, // 60 seconds query timeout
+      reconnect: true, // Auto-reconnect
+      idleTimeout: 300000, // 5 minutes idle timeout
+      maxIdle: 10 // Maximum idle connections
     };
   }
 

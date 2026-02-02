@@ -24,14 +24,38 @@ const feedbackRoutes = require('./routes/feedback_v2');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Basic middleware
-app.use(helmet());
+// Basic middleware with performance optimizations
+app.use(helmet({
+  contentSecurityPolicy: false, // Disable CSP for development
+  crossOriginEmbedderPolicy: false
+}));
 app.use(cors({
   origin: true, // Allow all origins for debugging
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ 
+  limit: '10mb',
+  strict: false // Relax JSON parsing for better performance
+}));
+app.use(express.urlencoded({ 
+  extended: true, 
+  limit: '10mb',
+  parameterLimit: 1000
+}));
+
+// Add response time middleware
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    if (duration > 1000) { // Log slow requests
+      console.warn(`⚠️ Slow request: ${req.method} ${req.path} - ${duration}ms`);
+    }
+  });
+  next();
+});
 
 // Serve static files (QR codes)
 app.use('/public', express.static(path.join(__dirname, 'public')));

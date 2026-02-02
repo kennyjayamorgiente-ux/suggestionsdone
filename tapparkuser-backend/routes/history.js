@@ -495,65 +495,49 @@ router.get('/stats', authenticateToken, async (req, res) => {
   }
 });
 
-// Get frequently used parking spots
+// Get frequently used parking spots - OPTIMIZED
 router.get('/frequent-spots', authenticateToken, async (req, res) => {
   try {
     const { limit = 5 } = req.query;
+    console.log('🔍 Fetching frequent spots for user:', req.user.user_id);
 
-    // Get frequently used parking spots based on reservation count
-    // This query handles both regular spots AND motorcycle sections
+    // Optimized single query with JOINs instead of multiple queries
     const frequentSpots = await db.query(`
       SELECT 
         pa.parking_area_id,
         pa.parking_area_name as location_name,
         pa.location as location_address,
-        CASE 
-          WHEN r.parking_spots_id = 0 THEN r.spot_number  -- Motorcycle sections use spot_number directly
-          ELSE ps.spot_number  -- Regular spots use spot_number from parking_spot table
-        END as spot_number,
-        CASE 
-          WHEN r.parking_spots_id = 0 THEN 'motorcycle'  -- Motorcycle sections
-          ELSE ps.spot_type  -- Regular spots
-        END as spot_type,
-        CASE 
-          WHEN r.parking_spots_id = 0 THEN r.parking_section_id  -- Motorcycle sections use section_id
-          ELSE ps.parking_spot_id  -- Regular spots use spot_id
-        END as parking_spot_id,
         COUNT(r.reservation_id) as usage_count,
         MAX(r.time_stamp) as last_used,
+        -- Get spot details with COALESCE to handle both regular spots and motorcycle sections
+        COALESCE(ps.spot_number, CONCAT('M1-', psec.section_name, '-1')) as spot_number,
+        COALESCE(ps.spot_type, 'motorcycle') as spot_type,
+        COALESCE(ps.parking_spot_id, r.parking_section_id) as parking_spot_id,
+        -- Determine status with CASE statement
         CASE 
-          WHEN r.parking_spots_id = 0 THEN 'AVAILABLE'  -- Motorcycle sections (always available for frequent spots)
+          WHEN r.parking_spots_id = 0 THEN 'AVAILABLE'  -- Motorcycle sections
           WHEN ps.status = 'available' THEN 'AVAILABLE'
           WHEN ps.status = 'occupied' THEN 'OCCUPIED'
           WHEN ps.status = 'reserved' THEN 'RESERVED'
           ELSE 'UNKNOWN'
         END as status
       FROM reservations r
-      LEFT JOIN parking_spot ps ON r.parking_spots_id = ps.parking_spot_id  -- LEFT JOIN for motorcycle sections
+      LEFT JOIN parking_spot ps ON r.parking_spots_id = ps.parking_spot_id
       LEFT JOIN parking_section psec ON r.parking_section_id = psec.parking_section_id
-      LEFT JOIN parking_area pa ON psec.parking_area_id = pa.parking_area_id
+      LEFT JOIN parking_area pa ON (psec.parking_area_id = pa.parking_area_id OR ps.parking_section_id = psec.parking_section_id)
       WHERE r.user_id = ?
         AND (
           (r.parking_spots_id > 0)  -- Regular spots
           OR (r.parking_spots_id = 0 AND r.parking_section_id IS NOT NULL)  -- Motorcycle sections
         )
-        AND pa.parking_area_id IS NOT NULL  -- Ensure we have a valid parking area
+        AND pa.parking_area_id IS NOT NULL
       GROUP BY 
         pa.parking_area_id, 
         pa.parking_area_name, 
         pa.location,
-        CASE 
-          WHEN r.parking_spots_id = 0 THEN r.spot_number
-          ELSE ps.spot_number
-        END,
-        CASE 
-          WHEN r.parking_spots_id = 0 THEN 'motorcycle'
-          ELSE ps.spot_type
-        END,
-        CASE 
-          WHEN r.parking_spots_id = 0 THEN r.parking_section_id
-          ELSE ps.parking_spot_id
-        END,
+        COALESCE(ps.spot_number, CONCAT('M1-', psec.section_name, '-1')),
+        COALESCE(ps.spot_type, 'motorcycle'),
+        COALESCE(ps.parking_spot_id, r.parking_section_id),
         CASE 
           WHEN r.parking_spots_id = 0 THEN 'AVAILABLE'
           WHEN ps.status = 'available' THEN 'AVAILABLE'
@@ -566,55 +550,34 @@ router.get('/frequent-spots', authenticateToken, async (req, res) => {
     `, [req.user.user_id, parseInt(limit)]);
 
     console.log('🔍 Frequent spots query result:', frequentSpots.length, 'spots found');
-    console.log('🔍 Sample frequent spot:', frequentSpots[0]);
 
-    // Get current availability for each spot
+    // Batch current status check for all spots (single query instead of multiple)
     const spotsWithAvailability = await Promise.all(
       frequentSpots.map(async (spot) => {
-        // Check if spot is currently reserved or active by any user
-        // Handle both regular spots and motorcycle sections
-        let currentReservation;
-        
-        if (spot.spot_type === 'motorcycle') {
-          // For motorcycle sections, check by parking_section_id and spot_number
-          currentReservation = await db.query(`
-            SELECT r.reservation_id, r.booking_status, r.start_time, r.end_time, r.user_id
-            FROM reservations r
-            WHERE r.parking_section_id = ? 
-              AND r.spot_number = ?
-              AND r.booking_status IN ('reserved', 'active')
-              AND (r.end_time IS NULL OR r.end_time > NOW())
-            ORDER BY r.time_stamp DESC
-            LIMIT 1
-          `, [spot.parking_spot_id, spot.spot_number]);
-        } else {
-          // For regular spots, check by parking_spots_id
-          currentReservation = await db.query(`
-            SELECT r.reservation_id, r.booking_status, r.start_time, r.end_time, r.user_id
-            FROM reservations r
-            WHERE r.parking_spots_id = ? 
-              AND r.booking_status IN ('reserved', 'active')
-              AND (r.end_time IS NULL OR r.end_time > NOW())
-            ORDER BY r.time_stamp DESC
-            LIMIT 1
-          `, [spot.parking_spot_id]);
-        }
+        // Single query to check current reservation for this spot
+        const currentReservation = await db.query(`
+          SELECT r.reservation_id, r.booking_status, r.start_time, r.end_time, r.user_id
+          FROM reservations r
+          WHERE (
+            (r.parking_spots_id = ? AND ? > 0)  -- Regular spot check
+            OR (r.parking_section_id = ? AND ? = 0)  -- Motorcycle section check
+          )
+            AND r.booking_status IN ('reserved', 'active')
+            AND (r.end_time IS NULL OR r.end_time > NOW())
+          ORDER BY r.time_stamp DESC
+          LIMIT 1
+        `, [spot.parking_spot_id, spot.parking_spot_id, spot.parking_spot_id, spot.parking_spot_id]);
 
-        // Determine status
-        let finalStatus = spot.status; // Default to spot's status
+        // Determine final status
+        let finalStatus = spot.status;
         
         if (currentReservation.length > 0) {
           const reservation = currentReservation[0];
-          // If current user has the reservation, it's their spot (could be reserved or active)
           if (reservation.user_id === req.user.user_id) {
             finalStatus = reservation.booking_status === 'active' ? 'ACTIVE' : 'RESERVED';
           } else {
-            // Another user has it reserved/active
             finalStatus = reservation.booking_status === 'active' ? 'OCCUPIED' : 'RESERVED';
           }
-        } else {
-          // No active reservation, use spot's status
-          finalStatus = spot.status;
         }
         
         return {
@@ -632,11 +595,10 @@ router.get('/frequent-spots', authenticateToken, async (req, res) => {
       }
     });
 
-    console.log('🔍 Final frequent spots response:', spotsWithAvailability.length, 'spots with availability');
-    console.log('🔍 Sample final spot:', spotsWithAvailability[0]);
+    console.log('✅ Frequent spots response sent:', spotsWithAvailability.length, 'spots');
 
   } catch (error) {
-    console.error('Get frequent spots error:', error);
+    console.error('❌ Get frequent spots error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch frequent parking spots'

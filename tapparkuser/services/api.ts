@@ -12,7 +12,31 @@ console.log('🌍 API Base URL:', API_BASE_URL);
 // API Service for Tapparkuser Backend
 export class ApiService {
   private static baseURL = API_BASE_URL;
-  private static REQUEST_TIMEOUT = 15000; // 15 seconds timeout
+  private static REQUEST_TIMEOUT = 30000; // 30 seconds timeout
+  private static RETRY_ATTEMPTS = 2; // Number of retry attempts
+  private static RETRY_DELAY = 1000; // Delay between retries in ms
+  
+  // Request caching
+  private static cache = new Map<string, { data: any; timestamp: number }>();
+  private static CACHE_DURATION = 5 * 60 * 1000; // 5 minutes cache
+  
+  // Request debouncing
+  private static pendingRequests = new Map<string, Promise<any>>();
+  
+  // Clear cache method
+  static clearCache(): void {
+    this.cache.clear();
+    console.log('🗑️ API cache cleared');
+  }
+  
+  // Clear specific cache entry
+  static clearCacheEntry(url: string): void {
+    for (const [key] of this.cache.entries()) {
+      if (key.includes(url)) {
+        this.cache.delete(key);
+      }
+    }
+  }
   
   // Helper function to create a hash/mask of token for logging
   private static getTokenHash(token: string): string {
@@ -24,18 +48,35 @@ export class ApiService {
     return `${start}${middle}${end}`;
   }
   
-  // Helper function to add timeout to fetch
+  // Helper function to add timeout to fetch with retry logic
   private static async fetchWithTimeout(
     url: string,
     config: RequestInit,
-    timeout: number = this.REQUEST_TIMEOUT
+    timeout: number = this.REQUEST_TIMEOUT,
+    retryCount: number = 0
   ): Promise<Response> {
-    return Promise.race([
-      fetch(url, config),
-      new Promise<Response>((_, reject) =>
-        setTimeout(() => reject(new Error('Request timeout: Server did not respond in time')), timeout)
-      ),
-    ]);
+    try {
+      return Promise.race([
+        fetch(url, config),
+        new Promise<Response>((_, reject) =>
+          setTimeout(() => reject(new Error('Request timeout: Server did not respond in time')), timeout)
+        ),
+      ]);
+    } catch (error) {
+      // Retry logic for network errors
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const isRetryable = errorMessage.includes('timeout') || 
+                         errorMessage.includes('Failed to fetch') ||
+                         errorMessage.includes('Network request failed');
+      
+      if (isRetryable && retryCount < this.RETRY_ATTEMPTS) {
+        console.log(`🔄 Retrying request (${retryCount + 1}/${this.RETRY_ATTEMPTS}):`, url);
+        await new Promise(resolve => setTimeout(resolve, this.RETRY_DELAY));
+        return this.fetchWithTimeout(url, config, timeout, retryCount + 1);
+      }
+      
+      throw error;
+    }
   }
   
   private static buildUrl(endpoint: string): string {
@@ -49,12 +90,52 @@ export class ApiService {
     return `${normalizedBase}${normalizedEndpoint}`;
   }
 
-  // Generic request method
+  // Generic request method with caching and debouncing
   private static async request<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
+    useCache: boolean = false
   ): Promise<T> {
     const url = this.buildUrl(endpoint);
+    const cacheKey = `${options.method || 'GET'}:${url}:${JSON.stringify(options.body || '')}`;
+    
+    // Check cache for GET requests
+    if (useCache && (!options.method || options.method === 'GET')) {
+      const cached = this.cache.get(cacheKey);
+      if (cached && Date.now() - cached.timestamp < this.CACHE_DURATION) {
+        console.log('📋 Using cached response for:', url);
+        return cached.data;
+      }
+    }
+    
+    // Debounce: if same request is pending, return the existing promise
+    if (this.pendingRequests.has(cacheKey)) {
+      console.log('⏳ Request debounced, returning pending promise:', url);
+      return this.pendingRequests.get(cacheKey);
+    }
+    
+    // Create the request promise
+    const requestPromise = this.executeRequest<T>(url, options, useCache, cacheKey);
+    
+    // Store pending request
+    this.pendingRequests.set(cacheKey, requestPromise);
+    
+    try {
+      const result = await requestPromise;
+      return result;
+    } finally {
+      // Clean up pending request
+      this.pendingRequests.delete(cacheKey);
+    }
+  }
+  
+  // Execute the actual request
+  private static async executeRequest<T>(
+    url: string,
+    options: RequestInit,
+    useCache: boolean,
+    cacheKey: string
+  ): Promise<T> {
     
     const defaultHeaders: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -70,7 +151,7 @@ export class ApiService {
     } else {
       console.log('🔑 API Request - Token status: No token');
       console.log('🌐 API Request - URL:', url);
-      console.warn('⚠️ No authentication token found for API request to:', endpoint);
+      console.warn('⚠️ No authentication token found for API request to:', url);
     }
 
     const config: RequestInit = {
@@ -145,6 +226,21 @@ export class ApiService {
         throw new Error(errorMessage);
       }
 
+      // Cache successful GET requests
+      if (useCache && response.ok && (!options.method || options.method === 'GET')) {
+        this.cache.set(cacheKey, { data, timestamp: Date.now() });
+        
+        // Clean old cache entries periodically
+        if (this.cache.size > 50) {
+          const now = Date.now();
+          for (const [key, value] of this.cache.entries()) {
+            if (now - value.timestamp > this.CACHE_DURATION) {
+              this.cache.delete(key);
+            }
+          }
+        }
+      }
+      
       return data;
     } catch (error) {
       // Handle network errors (connection refused, timeout, etc.)
@@ -648,7 +744,7 @@ export class ApiService {
       timestamp: string;
       environment: string;
       version: string;
-    }>('/health');
+    }>('/health', {}, true); // Use cache
   }
 
   // Parking Areas endpoints
@@ -671,7 +767,7 @@ export class ApiService {
           is_active: string;
         }>;
       };
-    }>('/parking/locations');
+    }>('/parking/locations', {}, true); // Use cache
   }
 
   static async getParkingSpots(areaId: number, vehicleType?: string, includeAll?: boolean) {
@@ -773,7 +869,7 @@ export class ApiService {
           itemsPerPage: number;
         };
       };
-    }>(`/history?${params.toString()}`);
+    }>(`/history?${params.toString()}`, {}, true); // Use cache
   }
 
   // Get parking history only
@@ -798,7 +894,7 @@ export class ApiService {
           itemsPerPage: number;
         };
       };
-    }>(`/history/parking?${params.toString()}`);
+    }>(`/history/parking?${params.toString()}`, {}, true); // Use cache
   }
 
   // Get payment history only
@@ -823,7 +919,7 @@ export class ApiService {
           itemsPerPage: number;
         };
       };
-    }>(`/history/payments?${params.toString()}`);
+    }>(`/history/payments?${params.toString()}`, {}, true); // Use cache
   }
 
   // Delete history record
