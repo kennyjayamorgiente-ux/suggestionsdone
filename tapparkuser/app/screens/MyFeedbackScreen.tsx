@@ -68,8 +68,6 @@ const MyFeedbackScreen: React.FC = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedFeedback, setSelectedFeedback] = useState<Feedback | null>(null);
   const [feedbackComments, setFeedbackComments] = useState<FeedbackComment[]>([]);
-  const [newComment, setNewComment] = useState('');
-  const [submittingComment, setSubmittingComment] = useState(false);
   const [loadingDetails, setLoadingDetails] = useState(false);
 
   const styles = createHistoryScreenStyles(screenDimensions, colors);
@@ -169,49 +167,6 @@ const MyFeedbackScreen: React.FC = () => {
     setModalVisible(false);
     setSelectedFeedback(null);
     setFeedbackComments([]);
-    setNewComment('');
-  };
-
-  const handleSubmitComment = async () => {
-    if (!newComment.trim() || !selectedFeedback) {
-      Alert.alert('Error', 'Please enter a comment');
-      return;
-    }
-
-    try {
-      setSubmittingComment(true);
-      
-      // Call API to submit comment
-      const response = await ApiService.addFeedbackComment(selectedFeedback.feedback_id, newComment.trim());
-      
-      if (response.success) {
-        setNewComment('');
-        // Refresh comments
-        await loadFeedbackComments(selectedFeedback.feedback_id);
-        Alert.alert('Success', 'Comment submitted successfully');
-      } else {
-        throw new Error(response.message || 'Failed to submit comment');
-      }
-    } catch (error) {
-      console.error('Error submitting comment:', error);
-      Alert.alert('Error', 'Failed to submit comment');
-    } finally {
-      setSubmittingComment(false);
-    }
-  };
-
-  const loadFeedbackComments = async (feedbackId: number) => {
-    try {
-      const response = await ApiService.getFeedbackDetails(feedbackId);
-      if (response.success) {
-        const commentsArray = Array.isArray(response.data.comments) 
-          ? response.data.comments 
-          : (response.data.comments ? [response.data.comments] : []);
-        setFeedbackComments(commentsArray);
-      }
-    } catch (error) {
-      console.error('Error loading comments:', error);
-    }
   };
 
   // Profile picture component (same as HistoryScreen)
@@ -500,63 +455,25 @@ const MyFeedbackScreen: React.FC = () => {
                   </View>
                 </View>
 
-                {/* Add Comment Section */}
+                {/* User Cannot Reply Notice */}
                 <View style={styles.reservationDetailCard}>
                   <View style={styles.reservationDetailSection}>
-                    <Text style={styles.reservationDetailLabel}>Add a Comment</Text>
+                    <Text style={styles.reservationDetailLabel}>About Replies</Text>
                     <View style={{
-                      flexDirection: 'row',
-                      alignItems: 'flex-end',
+                      backgroundColor: '#FFF3CD',
+                      borderRadius: 8,
+                      padding: 16,
                       marginTop: 8,
+                      borderLeftWidth: 4,
+                      borderLeftColor: '#FFC107',
                     }}>
-                      <TextInput
-                        style={{
-                          flex: 1,
-                          fontSize: 14,
-                          color: '#333',
-                          minHeight: 80,
-                          marginRight: 8,
-                          borderWidth: 1,
-                          borderColor: '#E5E7EB',
-                          borderRadius: 8,
-                          padding: 12,
-                          backgroundColor: '#FFFFFF',
-                        }}
-                        placeholder="Type your comment here..."
-                        value={newComment}
-                        onChangeText={setNewComment}
-                        multiline
-                        numberOfLines={3}
-                        textAlignVertical="top"
-                        placeholderTextColor="#9CA3AF"
-                      />
-                      <TouchableOpacity
-                        style={[
-                          {
-                            backgroundColor: '#8A0000',
-                            width: 40,
-                            height: 40,
-                            borderRadius: 20,
-                            justifyContent: 'center',
-                            alignItems: 'center',
-                          },
-                          (!newComment.trim() || submittingComment) && { backgroundColor: '#D1D5DB' }
-                        ]}
-                        onPress={handleSubmitComment}
-                        disabled={!newComment.trim() || submittingComment}
-                      >
-                        {submittingComment ? (
-                          <ActivityIndicator size="small" color="#FFFFFF" />
-                        ) : (
-                          <SvgXml
-                            xml={`<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-<path d="M15.5 8L0.5 1L7.5 8L0.5 15L15.5 8Z" fill="white"/>
-</svg>`}
-                            width={16}
-                            height={16}
-                          />
-                        )}
-                      </TouchableOpacity>
+                      <Text style={{
+                        fontSize: 14,
+                        color: '#856404',
+                        lineHeight: 20,
+                      }}>
+                        Only administrators can reply to feedback. If you need to provide additional information or have follow-up questions, please submit a new feedback from your profile.
+                      </Text>
                     </View>
                   </View>
                 </View>

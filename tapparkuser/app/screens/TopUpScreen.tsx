@@ -17,60 +17,23 @@ import { WebView } from 'react-native-webview';
 import * as SystemUI from 'expo-system-ui';
 import SharedHeader from '../../components/SharedHeader';
 import { SvgXml } from 'react-native-svg';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
+import { useThemeColors } from '../../contexts/ThemeContext';
 import { 
   maroonUsersEditIconSvg,
   maroonTimeIconSvg,
   maroonProfitHandIconSvg
 } from '../assets/icons/index2';
 import { ApiService } from '../../services/api';
-import { topUpScreenStyles } from '../styles/topUpScreenStyles';
-
-const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
-
-// Responsive calculations
-// Enhanced responsive calculations
-const isSmallScreen = screenWidth < 375;
-const isMediumScreen = screenWidth >= 375 && screenWidth < 414;
-const isLargeScreen = screenWidth >= 414 && screenWidth < 768;
-const isTablet = screenWidth >= 768 && screenWidth < 1024;
-const isLargeTablet = screenWidth >= 1024;
-
-const getResponsiveFontSize = (baseSize: number) => {
-  if (isSmallScreen) return baseSize * 0.85;
-  if (isMediumScreen) return baseSize * 0.95;
-  if (isLargeScreen) return baseSize;
-  if (isTablet) return baseSize * 1.1;
-  if (isLargeTablet) return baseSize * 1.2;
-  return baseSize;
-};
-
-const getResponsiveSize = (baseSize: number) => {
-  if (isSmallScreen) return baseSize * 0.8;
-  if (isMediumScreen) return baseSize * 0.9;
-  if (isLargeScreen) return baseSize;
-  if (isTablet) return baseSize * 1.05;
-  if (isLargeTablet) return baseSize * 1.1;
-  return baseSize;
-};
-
-const getResponsivePadding = (basePadding: number) => {
-  if (isSmallScreen) return basePadding * 0.8;
-  if (isMediumScreen) return basePadding * 0.9;
-  if (isLargeScreen) return basePadding;
-  if (isTablet) return basePadding * 1.1;
-  if (isLargeTablet) return basePadding * 1.2;
-  return basePadding;
-};
-
-const getResponsiveMargin = (baseMargin: number) => {
-  if (isSmallScreen) return baseMargin * 0.8;
-  if (isMediumScreen) return baseMargin * 0.9;
-  if (isLargeScreen) return baseMargin;
-  if (isTablet) return baseMargin * 1.1;
-  if (isLargeTablet) return baseMargin * 1.2;
-  return baseMargin;
-};
+import { 
+  useScreenDimensions, 
+  getAdaptiveFontSize, 
+  getAdaptiveSize, 
+  getAdaptivePadding, 
+  getAdaptiveMargin 
+} from '../../hooks/use-screen-dimensions';
+import { createHistoryScreenStyles } from '../styles/historyScreenStyles';
 
 interface Plan {
   plan_id: number;
@@ -83,12 +46,16 @@ interface Plan {
 const TopUpScreen: React.FC = () => {
   const router = useRouter();
   const { user } = useAuth();
+  const colors = useThemeColors();
+  const screenDimensions = useScreenDimensions();
   const [userProfile, setUserProfile] = useState<any>(null);
   const [isConfirmationModalVisible, setIsConfirmationModalVisible] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState(false);
+  
+  const styles = createHistoryScreenStyles(screenDimensions, colors);
   
   // PayPal state
   const [showPayPalWebView, setShowPayPalWebView] = useState(false);
@@ -99,7 +66,7 @@ const TopUpScreen: React.FC = () => {
   const [paypalProcessingStarted, setPaypalProcessingStarted] = useState(false);
 
   // Profile picture component
-  const ProfilePicture = ({ size = 120 }: { size?: number }) => {
+  const ProfilePicture = ({ size = 100 }: { size?: number }) => {
     const getInitials = () => {
       if (!userProfile) return '?';
       const firstName = userProfile.first_name || '';
@@ -107,11 +74,11 @@ const TopUpScreen: React.FC = () => {
       return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
     };
 
-    const profileImageUrl = userProfile?.profile_image || userProfile?.profile_image_url || user?.profile_image;
+    const profileImageUrl = userProfile?.profile_image || userProfile?.profile_image_url || (user as any)?.profile_image;
 
     if (profileImageUrl) {
       return (
-        <View style={[topUpScreenStyles.profilePicture, { width: size, height: size, borderRadius: size / 2 }]}>
+        <View style={[styles.profilePicture, { width: size, height: size, borderRadius: size / 2 }]}>
           <ExpoImage
             source={{ uri: profileImageUrl }}
             style={{ width: size - 4, height: size - 4, borderRadius: (size - 4) / 2 }}
@@ -127,10 +94,8 @@ const TopUpScreen: React.FC = () => {
     }
 
     return (
-      <View style={[topUpScreenStyles.profilePicture, { width: size, height: size, borderRadius: size / 2 }]}>
-        <Text style={[topUpScreenStyles.profileInitials, { fontSize: size * 0.3 }]}>
-          {getInitials()}
-        </Text>
+      <View style={[styles.profilePicture, { width: size, height: size, borderRadius: size / 2 }]}>
+        <Text style={{ color: 'white', fontSize: size / 3, fontWeight: 'bold' }}>{getInitials()}</Text>
       </View>
     );
   };
@@ -298,111 +263,92 @@ const TopUpScreen: React.FC = () => {
   };
 
   return (
-    <View style={topUpScreenStyles.container}>
+    <View style={styles.container}>
       <SharedHeader 
-        title="Top up" 
+        title="Plans" 
         showBackButton={true}
         onBackPress={() => router.back()}
       />
       
-      <View style={topUpScreenStyles.scrollContainer}>
-        {/* Profile Card */}
-        <View style={topUpScreenStyles.profileCard}>
+      <View style={styles.scrollContainer}>
+        {/* Profile Content Card */}
+        <View style={styles.profileCard}>
           {/* Profile Picture Section */}
-          <View style={topUpScreenStyles.profilePictureSection}>
-            <View style={topUpScreenStyles.profilePictureContainer}>
-              <ProfilePicture size={getResponsiveSize(140)} />
+          <View style={styles.fixedProfileSection}>
+            <View style={styles.profilePictureContainer}>
+              <ProfilePicture size={screenDimensions.isTablet ? 170 : 150} />
             </View>
-            <View style={topUpScreenStyles.userInfoContainer}>
-              {loading ? (
-                <View style={topUpScreenStyles.loadingContainer}>
-                  <ActivityIndicator size="small" color="#8A0000" />
-                  <Text style={topUpScreenStyles.loadingText}>Loading...</Text>
-                </View>
-              ) : userProfile ? (
-                <>
-                  <Text style={topUpScreenStyles.userName}>
-                    {userProfile.first_name?.toUpperCase()} {userProfile.last_name?.toUpperCase()}
-                  </Text>
-                  <Text style={topUpScreenStyles.userEmail}>{userProfile.email}</Text>
-                </>
-              ) : (
-                <>
-                  <Text style={topUpScreenStyles.userName}>USER</Text>
-                  <Text style={topUpScreenStyles.userEmail}>No profile data</Text>
-                </>
-              )}
+            
+            <View style={styles.userInfoContainer}>
+              <Text style={styles.userName}>PLANS</Text>
+              <Text style={styles.userEmail}>CHOOSE YOUR PARKING PLAN</Text>
             </View>
           </View>
 
-          {/* Plans Section */}
           <ScrollView 
-            style={topUpScreenStyles.profileCardScroll}
+            style={styles.profileCardScroll} 
             showsVerticalScrollIndicator={false}
           >
-            <View style={topUpScreenStyles.plansSection}>
-              <View style={topUpScreenStyles.plansHeader}>
-                {maroonProfitHandIconSvg && (
-                  <SvgXml 
-                    xml={maroonProfitHandIconSvg}
-                    width={getResponsiveSize(20)}
-                    height={getResponsiveSize(20)}
-                  />
-                )}
-                <Text style={topUpScreenStyles.plansTitle}>Select a Plan:</Text>
-              </View>
+            {/* Plans Section */}
+            <View style={styles.spotsContainer}>
+              <Text style={styles.spotsTitle}>Available Plans</Text>
               
-              <View style={topUpScreenStyles.plansList}>
-                {loading ? (
-                  <View style={topUpScreenStyles.loadingContainer}>
-                    <ActivityIndicator size="large" color="#8A0000" />
-                    <Text style={topUpScreenStyles.loadingText}>Loading plans...</Text>
-                  </View>
-                ) : plans && plans.length > 0 ? (
-                  plans.map((plan, index) => (
-                    <TouchableOpacity 
-                      key={plan.plan_id}
-                      style={topUpScreenStyles.planCard}
-                      onPress={() => handleSelectPlan(plan)}
-                      activeOpacity={0.7}
-                    >
-                      <View style={topUpScreenStyles.planHeader}>
-                        <Text style={topUpScreenStyles.planTitle}>{plan.plan_name}</Text>
-                        <Text style={topUpScreenStyles.planSubtitle}>{plan.description}</Text>
+              {loading ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color={colors.primary} />
+                  <Text style={styles.loadingText}>Loading plans...</Text>
+                </View>
+              ) : plans && plans.length > 0 ? (
+                plans.map((plan) => (
+                  <TouchableOpacity 
+                    key={plan.plan_id}
+                    style={styles.parkingCard}
+                    onPress={() => handleSelectPlan(plan)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.locationHeader}>
+                      <View style={styles.locationTextContainer}>
+                        <Text style={styles.parkingLocation}>{plan.plan_name}</Text>
+                        <Text style={styles.parkingSpotId}>PLAN-{plan.plan_id}</Text>
                       </View>
-                      
-                      <View style={topUpScreenStyles.planContent}>
-                        <View style={topUpScreenStyles.priceSection}>
-                          <Text style={topUpScreenStyles.price}>{plan.cost}</Text>
-                          <Text style={topUpScreenStyles.currency}>pesos</Text>
-                        </View>
-                        
-                        <View style={topUpScreenStyles.hoursSection}>
-                          {maroonTimeIconSvg && (
-                            <SvgXml 
-                              xml={maroonTimeIconSvg}
-                              width={getResponsiveSize(20)}
-                              height={getResponsiveSize(20)}
-                            />
-                          )}
-                          <Text style={topUpScreenStyles.hoursText}>{plan.number_of_hours} hours</Text>
-                        </View>
-                        
-                        <TouchableOpacity 
-                          style={topUpScreenStyles.selectButton}
-                          onPress={() => handleSelectPlan(plan)}
-                        >
-                          <Text style={topUpScreenStyles.selectButtonText}>Select {plan.number_of_hours} hours</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </TouchableOpacity>
-                  ))
-                ) : (
-                  <View style={topUpScreenStyles.loadingContainer}>
-                    <Text style={topUpScreenStyles.loadingText}>No plans available</Text>
-                  </View>
-                )}
-              </View>
+                      <Ionicons 
+                        name="wallet" 
+                        size={32} 
+                        color={colors.primary} 
+                      />
+                    </View>
+                    
+                    <Text style={styles.parkingLabel}>Price</Text>
+                    <View style={styles.timeSlotContainer}>
+                      <Text style={styles.timestampDetailValue}>
+                        ₱{plan.cost} pesos
+                      </Text>
+                    </View>
+                    
+                    <Text style={styles.parkingLabel}>Hours Included</Text>
+                    <View style={styles.timeSlotContainer}>
+                      <Text style={styles.timestampDetailValue}>
+                        {plan.number_of_hours} hours
+                      </Text>
+                    </View>
+                    
+                    <Text style={styles.parkingLabel}>Description</Text>
+                    <Text style={styles.timestampDetailValue}>
+                      {plan.description}
+                    </Text>
+                    
+                    <View style={styles.timestampDetailRow}>
+                      <Text style={styles.timestampDetailLabel}>Tap to purchase this plan</Text>
+                      <Ionicons name="chevron-forward" size={16} color="#8A0000" />
+                    </View>
+                  </TouchableOpacity>
+                ))
+              ) : (
+                <View style={styles.emptyContainer}>
+                  <Text style={styles.emptyText}>No plans available</Text>
+                  <Text style={styles.emptySubtext}>Please check back later for available plans</Text>
+                </View>
+              )}
             </View>
           </ScrollView>
         </View>
@@ -415,66 +361,87 @@ const TopUpScreen: React.FC = () => {
         animationType="fade"
         onRequestClose={handleCloseConfirmationModal}
       >
-        <View style={topUpScreenStyles.modalOverlay}>
-          <View style={topUpScreenStyles.confirmationModalContainer}>
-            <View style={topUpScreenStyles.modalHeader}>
-              <Text style={topUpScreenStyles.modalTitle}>Confirm Plan Selection</Text>
+        <View style={styles.modalOverlay}>
+          <View style={styles.reservationModalContainer}>
+            <View style={styles.reservationModalHeader}>
+              <Text style={styles.reservationModalTitle}>Confirm Plan Selection</Text>
               <TouchableOpacity onPress={handleCloseConfirmationModal}>
-                <Text style={topUpScreenStyles.closeXButton}>✕</Text>
+                <Ionicons name="close" size={24} color="#8A0000" />
               </TouchableOpacity>
             </View>
             
             {selectedPlan && (
-              <View style={topUpScreenStyles.planDetailsContainer}>
-                <View style={topUpScreenStyles.planInfoCard}>
-                  <Text style={topUpScreenStyles.planInfoTitle}>{selectedPlan.plan_name}</Text>
-                  <Text style={topUpScreenStyles.planInfoSubtitle}>{selectedPlan.description}</Text>
+              <ScrollView style={styles.reservationModalContent}>
+                <View style={styles.reservationDetailCard}>
+                  <View style={styles.reservationDetailHeader}>
+                    <Text style={styles.reservationLocation}>{selectedPlan.plan_name}</Text>
+                    <Text style={styles.reservationId}>PLAN-{selectedPlan.plan_id}</Text>
+                  </View>
                   
-                  <View style={topUpScreenStyles.planInfoContent}>
-                    <View style={topUpScreenStyles.priceInfoSection}>
-                      <Text style={topUpScreenStyles.priceInfoLabel}>Total Amount:</Text>
-                      <View style={topUpScreenStyles.priceInfoValue}>
-                        <Text style={topUpScreenStyles.priceInfoAmount}>{selectedPlan.cost}</Text>
-                        <Text style={topUpScreenStyles.priceInfoCurrency}>pesos</Text>
-                      </View>
-                    </View>
+                  <View style={styles.reservationDetailSection}>
+                    <Text style={styles.reservationDetailLabel}>Price</Text>
+                    <Text style={[styles.reservationDetailSubValue, { marginTop: 8, marginBottom: 16 }]}>
+                      ₱{selectedPlan.cost} pesos
+                    </Text>
                     
-                    <View style={topUpScreenStyles.hoursInfoSection}>
-                      {maroonTimeIconSvg && (
-                        <SvgXml 
-                          xml={maroonTimeIconSvg}
-                          width={getResponsiveSize(20)}
-                          height={getResponsiveSize(20)}
-                        />
-                      )}
-                      <Text style={topUpScreenStyles.hoursInfoText}>{selectedPlan.number_of_hours} hours will be added to your account</Text>
-                    </View>
+                    <Text style={styles.reservationDetailLabel}>Hours Included</Text>
+                    <Text style={[styles.reservationDetailSubValue, { marginTop: 8, marginBottom: 16 }]}>
+                      {selectedPlan.number_of_hours} hours
+                    </Text>
                     
-                    <Text style={topUpScreenStyles.planDescription}>{selectedPlan.description}</Text>
+                    <Text style={styles.reservationDetailLabel}>Description</Text>
+                    <Text style={[styles.reservationDetailSubValue, { marginTop: 8, marginBottom: 16 }]}>
+                      {selectedPlan.description}
+                    </Text>
                   </View>
                 </View>
                 
-                <View style={topUpScreenStyles.modalButtonsContainer}>
-                  <TouchableOpacity 
-                    style={topUpScreenStyles.cancelButton}
-                    onPress={handleCloseConfirmationModal}
-                  >
-                    <Text style={topUpScreenStyles.cancelButtonText}>Cancel</Text>
-                  </TouchableOpacity>
-                  
-                  <TouchableOpacity 
-                    style={[topUpScreenStyles.confirmButton, purchasing && topUpScreenStyles.confirmButtonDisabled]}
-                    onPress={handleConfirmPurchase}
-                    disabled={purchasing}
-                  >
-                    {purchasing ? (
-                      <ActivityIndicator size="small" color="white" />
-                    ) : (
-                      <Text style={topUpScreenStyles.confirmButtonText}>Confirm Purchase</Text>
-                    )}
-                  </TouchableOpacity>
+                <View style={styles.reservationDetailCard}>
+                  <View style={styles.reservationDetailSection}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 16 }}>
+                      <TouchableOpacity 
+                        style={[styles.bookNowButton, { 
+                          backgroundColor: '#6B7280',
+                          flex: 1,
+                          marginRight: 8,
+                          paddingHorizontal: 8
+                        }]}
+                        onPress={handleCloseConfirmationModal}
+                      >
+                        <Text style={[
+                          styles.bookNowButtonText, 
+                          { 
+                            fontSize: getAdaptiveFontSize(screenDimensions, 14),
+                            textAlign: 'center'
+                          }
+                        ]}>Cancel</Text>
+                      </TouchableOpacity>
+                      
+                      <TouchableOpacity 
+                        style={[styles.bookNowButton, { 
+                          flex: 1,
+                          opacity: purchasing ? 0.6 : 1,
+                          paddingHorizontal: 8
+                        }]}
+                        onPress={handleConfirmPurchase}
+                        disabled={purchasing}
+                      >
+                        {purchasing ? (
+                          <ActivityIndicator size="small" color="white" />
+                        ) : (
+                          <Text style={[
+                            styles.bookNowButtonText, 
+                            { 
+                              fontSize: getAdaptiveFontSize(screenDimensions, 14),
+                              textAlign: 'center'
+                            }
+                          ]}>Confirm</Text>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  </View>
                 </View>
-              </View>
+              </ScrollView>
             )}
           </View>
         </View>
@@ -487,58 +454,113 @@ const TopUpScreen: React.FC = () => {
         presentationStyle="fullScreen"
         onRequestClose={() => setShowPayPalWebView(false)}
       >
-        <View style={{ flex: 1, backgroundColor: '#fff' }}>
-          {/* Header */}
-          <View style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            padding: 15,
-            backgroundColor: '#f8f8f8',
-            borderBottomWidth: 1,
-            borderBottomColor: '#ddd',
-            paddingTop: Platform.OS === 'ios' ? 50 : 20
-          }}>
-            <TouchableOpacity 
-              onPress={() => setShowPayPalWebView(false)}
-              style={{ marginRight: 15 }}
-            >
-              <Text style={{ color: '#333', fontSize: 18, fontWeight: 'bold' }}>✕</Text>
-            </TouchableOpacity>
-            <Text style={{ color: '#333', fontSize: 18, fontWeight: 'bold' }}>
-              PayPal Payment
-            </Text>
-          </View>
-
+        <View style={{ flex: 1, backgroundColor: '#fff', position: 'relative' }}>
           {/* WebView */}
           {isProcessingPayPal ? (
-            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-              <ActivityIndicator size="large" color="#8A0000" />
-              <Text style={{ marginTop: 20, fontSize: 16, color: '#666' }}>
-                Processing payment...
-              </Text>
-            </View>
+            <>
+              {/* Header */}
+              <View style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                padding: 15,
+                backgroundColor: '#f8f8f8',
+                borderBottomWidth: 1,
+                borderBottomColor: '#ddd',
+                paddingTop: Platform.OS === 'ios' ? 50 : 20,
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                zIndex: 1
+              }}>
+                <TouchableOpacity 
+                  onPress={() => setShowPayPalWebView(false)}
+                  style={{ marginRight: 15 }}
+                >
+                  <Text style={{ color: '#333', fontSize: 18, fontWeight: 'bold' }}>✕</Text>
+                </TouchableOpacity>
+                <Text style={{ color: '#333', fontSize: 18, fontWeight: 'bold' }}>
+                  PayPal Payment
+                </Text>
+              </View>
+              
+              {/* Centered Spinner */}
+              <View style={{ 
+                flex: 1, 
+                justifyContent: 'center', 
+                alignItems: 'center',
+                backgroundColor: '#fff'
+              }}>
+                <ActivityIndicator size="large" color="#8A0000" />
+                <Text style={{ 
+                  marginTop: 20, 
+                  fontSize: getAdaptiveFontSize(screenDimensions, 16), 
+                  color: '#666',
+                  textAlign: 'center'
+                }}>
+                  Processing payment...
+                </Text>
+              </View>
+            </>
           ) : (
-            <WebView
-              source={{ uri: paypalUrl }}
-              onNavigationStateChange={handlePayPalNavigation}
-              style={{ flex: 1 }}
-              startInLoadingState={true}
-              renderLoading={() => (
-                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-                  <ActivityIndicator size="large" color="#8A0000" />
-                  <Text style={{ marginTop: 20, fontSize: 16, color: '#666' }}>
-                    Loading PayPal...
-                  </Text>
-                </View>
-              )}
-            />
+            <>
+              {/* Header */}
+              <View style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                padding: 15,
+                backgroundColor: '#f8f8f8',
+                borderBottomWidth: 1,
+                borderBottomColor: '#ddd',
+                paddingTop: Platform.OS === 'ios' ? 50 : 20
+              }}>
+                <TouchableOpacity 
+                  onPress={() => setShowPayPalWebView(false)}
+                  style={{ marginRight: 15 }}
+                >
+                  <Text style={{ color: '#333', fontSize: 18, fontWeight: 'bold' }}>✕</Text>
+                </TouchableOpacity>
+                <Text style={{ color: '#333', fontSize: 18, fontWeight: 'bold' }}>
+                  PayPal Payment
+                </Text>
+              </View>
+
+              {/* WebView */}
+              <WebView
+                source={{ uri: paypalUrl }}
+                onNavigationStateChange={handlePayPalNavigation}
+                style={{ flex: 1 }}
+                startInLoadingState={true}
+                renderLoading={() => (
+                  <View style={{ 
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    justifyContent: 'center', 
+                    alignItems: 'center',
+                    backgroundColor: '#fff',
+                    zIndex: 1
+                  }}>
+                    <ActivityIndicator size="large" color="#8A0000" />
+                    <Text style={{ 
+                      marginTop: 20, 
+                      fontSize: getAdaptiveFontSize(screenDimensions, 16), 
+                      color: '#666',
+                      textAlign: 'center'
+                    }}>
+                      Loading PayPal...
+                    </Text>
+                  </View>
+                )}
+              />
+            </>
           )}
         </View>
       </Modal>
     </View>
   );
 };
-
-// Styles are now in topUpScreenStyles.ts
 
 export default TopUpScreen;
